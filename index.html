@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Terminal Simulator</title>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --term-bg: #0c0c0c;
+            --text-color: #d4d4d4;
+            --primary-color: #4ec9b0;
+            --secondary-color: #569cd6;
+            --accent-color: #ce9178;
+            --error-color: #f44747;
+            --success-color: #6a9955;
+            --prompt-user: #4ec9b0;
+            --prompt-host: #569cd6;
+            --prompt-path: #ce9178;
+            --caret-color: #d4d4d4;
+            --font-stack: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body, html {
+            height: 100%;
+            width: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-stack);
+            font-size: 14px;
+            overflow: hidden;
+        }
+
+        /* Layout */
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Top Bar / Window Controls */
+        .terminal-window {
+            flex: 1;
+            background-color: var(--term-bg);
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+
+        .terminal-header {
+            background-color: #2d2d2d;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #333;
+        }
+
+        .window-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .control {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .close { background-color: #ff5f56; }
+        .minimize { background-color: #ffbd2e; }
+        .maximize { background-color: #27c93f; }
+
+        .terminal-title {
+            margin-left: 20px;
+            color: #999;
+            font-size: 12px;
+            flex-grow: 1;
+            text-align: center;
+            margin-right: 40px; /* Balance the controls on left */
+        }
+
+        /* Terminal Content Area */
+        .terminal-body {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            cursor: text;
+        }
+
+        /* Scrollbar styling */
+        .terminal-body::-webkit-scrollbar {
+            width: 10px;
+        }
+        .terminal-body::-webkit-scrollbar-track {
+            background: var(--term-bg);
+        }
+        .terminal-body::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 5px;
+        }
+        .terminal-body::-webkit-scrollbar-thumb:hover {
+            background: #444;
+        }
+
+        /* Output Lines */
+        .line {
+            margin-bottom: 5px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .output { color: var(--text-color); }
+        .error { color: var(--error-color); }
+        .success { color: var(--success-color); }
+        .info { color: var(--secondary-color); }
+        .directory { color: var(--secondary-color); font-weight: bold; }
+        .executable { color: var(--success-color); font-weight: bold; }
+
+        /* Prompt */
+        .prompt-line {
+            display: flex;
+            align-items: center;
+        }
+
+        .prompt {
+            margin-right: 8px;
+            white-space: nowrap;
+        }
+
+        .user { color: var(--prompt-user); font-weight: bold; }
+        .at { color: var(--text-color); }
+        .host { color: var(--prompt-host); font-weight: bold; }
+        .colon { color: var(--text-color); }
+        .path { color: var(--prompt-path); }
+        .symbol { color: var(--text-color); }
+
+        /* Input Area */
+        #cmd-input {
+            background: transparent;
+            border: none;
+            color: var(--text-color);
+            font-family: var(--font-stack);
+            font-size: 14px;
+            flex: 1;
+            outline: none;
+            caret-color: var(--caret-color);
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 600px) {
+            .container { padding: 0; border-radius: 0; }
+            .terminal-window { border-radius: 0; border: none; height: 100vh; }
+        }
+
+        /* Animation for opening */
+        .terminal-window {
+            animation: fadeIn 0.5s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="terminal-window">
+        <div class="terminal-header">
+            <div class="window-controls">
+                <div class="control close"></div>
+                <div class="control minimize"></div>
+                <div class="control maximize"></div>
+            </div>
+            <div class="terminal-title">guest@webterm:~</div>
+        </div>
+        <div class="terminal-body" id="terminal-body" onclick="focusInput()">
+            <div id="output"></div>
+            <div class="prompt-line">
+                <span class="prompt" id="prompt-label">
+                    <span class="user">guest</span><span class="at">@</span><span class="host">webterm</span><span class="colon">:</span><span class="path">~</span><span class="symbol">$</span>
+                </span>
+                <input type="text" id="cmd-input" autocomplete="off" spellcheck="false">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* --- File System Implementation --- */
+    
+    class FileSystem {
+        constructor() {
+            this.root = {
+                type: 'dir',
+                content: {
+                    'home': {
+                        type: 'dir',
+                        content: {
+                            'guest': {
+                                type: 'dir',
+                                content: {
+                                    'welcome.txt': { type: 'file', content: 'Welcome to WebTerm v1.0!\nA fully functional simulated terminal for the web.\nType "help" to see available commands.' },
+                                    'projects': { type: 'dir', content: {} }
+                                }
+                            }
+                        }
+                    },
+                    'bin': {
+                        type: 'dir',
+                        content: {
+                            'echo': { type: 'exec', content: 'builtin' },
+                            'ls': { type: 'exec', content: 'builtin' },
+                            'cd': { type: 'exec', content: 'builtin' },
+                            'cat': { type: 'exec', content: 'builtin' },
+                            'mkdir': { type: 'exec', content: 'builtin' },
+                            'touch': { type: 'exec', content: 'builtin' },
+                            'rm': { type: 'exec', content: 'builtin' },
+                            'clear': { type: 'exec', content: 'builtin' },
+                            'whoami': { type: 'exec', content: 'builtin' },
+                            'date': { type: 'exec', content: 'builtin' },
+                            'apt-get': { type: 'exec', content: 'builtin' }, // Package manager
+                            'repo': { type: 'exec', content: 'builtin' }   // App store list
+                        }
+                    },
+                    'etc': {
+                        type: 'dir',
+                        content: {
+                            'os-release': { type: 'file', content: 'PRETTY_NAME="WebTerm OS 1.0"\nVERSION="2023.10.05 (Stable)"' }
+                        }
+                    },
+                    'usr': {
+                        type: 'dir',
+                        content: {
+                            'local': {
+                                type: 'dir',
+                                content: {
+                                    'bin': { type: 'dir', content: {} } // Installed apps go here
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            
+            // Current working directory path stack (e.g., ['home', 'guest'])
+            this.cwd = ['home', 'guest'];
+        }
+
+        // Resolve a path (absolute or relative) to a directory object
+        resolvePath(pathStr) {
+            let parts = pathStr.split('/').filter(p => p !== '' && p !== '.');
+            let current = pathStr.startsWith('/') ? this.root : this.getCurrentDir();
+
+            for (let part of parts) {
+                if (part === '..') {
+                    if (this.cwd.length > 0 && !pathStr.startsWith('/')) {
+                        // Simplified traversal: We rebuild from root if '..' is at root level
+                        // Ideally we track parent pointers, but let's use the stack for relative
+                        // Note: resolvePath creates a reference, not mutating this.cwd directly yet
+                    }
+                    // Logic for absolute vs relative '..' is tricky in this simplified structure
+                    // Let's refactor resolvePath to handle the stack logic safely
+                }
+            }
+            
+            // Robust Path Resolution
+            let tempCwd = pathStr.startsWith('/') ? [] : [...this.cwd];
+            let pathParts = pathStr.split('/').filter(p => p.length > 0);
+            
+            for (let part of pathParts) {
+                if (part === '..') {
+                    tempCwd.pop();
+                } else if (part !== '.') {
+                    tempCwd.push(part);
+                }
+            }
+            
+            // Traverse
+            let node = this.root;
+            for (let part of tempCwd) {
+                if (node.content && node.content[part]) {
+                    node = node.content[part];
+                } else {
+                    return null; // Not found
+                }
+            }
+            return { node, pathStr: '/' + tempCwd.join('/') };
+        }
+
+        getCurrentDir() {
+            let node = this.root;
+            for (let part of this.cwd) {
+                if (node.content[part]) node = node.content[part];
+                else return this.root; // Fallback
+            }
+            return node;
+        }
+
+        getPathString() {
+            if (this.cwd.length === 0) return '/';
+            // Simplified: usually home is shown as ~
+            const joined = this.cwd.join('/');
+            if (joined.startsWith('home/guest')) {
+                return '~' + joined.substring(10);
+            }
+            return '/' + joined;
+        }
+
+        mkdir(name) {
+            const current = this.getCurrentDir();
+            if (current.content[name]) return { success: false, msg: `File or directory '${name}' already exists.` };
+            current.content[name] = { type: 'dir', content: {} };
+            return { success: true };
+        }
+
+        touch(name) {
+            const current = this.getCurrentDir();
+            current.content[name] = { type: 'file', content: '' };
+            return { success: true };
+        }
+
+        writeToFile(path, content) {
+            const res = this.resolvePath(path);
+            if (!res) return { success: false, msg: `Path '${path}' not valid.` };
+            if (res.node.type !== 'file') return { success: false, msg: `'${path}' is not a file.` };
+            res.node.content = content;
+            return { success: true };
+        }
+
+        readFile(path) {
+            const res = this.resolvePath(path);
+            if (!res || res.node.type === 'dir') return null;
+            return res.node.content;
+        }
+
+        ls() {
+            const current = this.getCurrentDir();
+            return Object.keys(current.content).map(name => {
+                const node = current.content[name];
+                return { name, type: node.type };
+            });
+        }
+
+        rm(name) {
+            const current = this.getCurrentDir();
+            if (!current.content[name]) return { success: false, msg: `Cannot remove '${name}': No such file or directory.` };
+            delete current.content[name];
+            return { success: true };
+        }
+        
+        // Install a "program" (adds an executable file to /usr/local/bin)
+        installProgram(name, scriptContent) {
+            const binPath = this.resolvePath('/usr/local/bin');
+            if(binPath && binPath.node.type === 'dir') {
+                binPath.node.content[name] = { type: 'exec', content: scriptContent };
+                return true;
+            }
+            return false;
+        }
+    }
+
+    /* --- Package Registry (Simulated Apt) --- */
+    const packageRegistry = {
+        'cowsay': {
+            description: 'Speaking cow interface',
+            script: `
+                const text = args.join(' ') || 'Moo?';
+                const line = '_'.repeat(text.length + 4);
+                return \`
+ < \${text} >
+  \${line}
+        \\   ^__^
+         \\  (oo)\\_______
+            (__)\\       )\\/\\
+                ||----w |
+                ||     ||
+                \`;
+            `
+        },
+        'matrix': {
+            description: 'Displays a cool matrix animation (simulated)',
+            script: `
+                return "The Matrix has you...\\n(Visual effects not supported in this stream)";
+            `
+        },
+        'fortune': {
+            description: 'Prints a random fortune',
+            script: `
+                const fortunes = [
+                    "The best way to predict the future is to invent it.",
+                    "Do or do not. There is no try.",
+                    "To be or not to be?",
+                    "Hello, World!",
+                    "Keep calm and compile on."
+                ];
+                return fortunes[Math.floor(Math.random() * fortunes.length)];
+            `
+        },
+        'joke': {
+            description: 'Tells a programming joke',
+            script: `
+                return "Why do programmers prefer dark mode?\\nBecause light attracts bugs.";
+            `
+        }
+    };
+
+    /* --- Terminal Logic --- */
+
+    const fs = new FileSystem();
+    const outputDiv = document.getElementById('output');
+    const input = document.getElementById('cmd-input');
+    const promptLabel = document.getElementById('prompt-label');
+    const terminalBody = document.getElementById('terminal-body');
+
+    let history = [];
+    let historyIndex = -1;
+
+    // Initial Message
+    printLine(`WebTerm OS [Version 1.0.0]`, 'info');
+    printLine(`(c) 2023 WebTerm Corporation. All rights reserved.`, 'info');
+    printLine(`Type 'help' for available commands or 'repo' to install apps.\n`);
+
+    function updatePrompt() {
+        const pathStr = fs.getPathString();
+        promptLabel.innerHTML = `<span class="user">guest</span><span class="at">@</span><span class="host">webterm</span><span class="colon">:</span><span class="path">${pathStr}</span><span class="symbol">$</span>`;
+    }
+
+    function printLine(text, className = 'output') {
+        const line = document.createElement('div');
+        line.className = `line ${className}`;
+        line.textContent = text;
+        outputDiv.appendChild(line);
+        scrollToBottom();
+    }
+
+    function printHTML(html) {
+        const line = document.createElement('div');
+        line.className = 'line output';
+        line.innerHTML = html;
+        outputDiv.appendChild(line);
+        scrollToBottom();
+    }
+
+    function scrollToBottom() {
+        terminalBody.scrollTop = terminalBody.scrollHeight;
+    }
+
+    function focusInput() {
+        input.focus();
+    }
+
+    // Command Processor
+    function executeCommand(rawCmd) {
+        // Split command and arguments, respecting quotes
+        const parts = parseArgs(rawCmd);
+        const cmd = parts[0];
+        const args = parts.slice(1);
+
+        if (!cmd) return;
+
+        // Add to history
+        history.push(rawCmd);
+        historyIndex = history.length;
+
+        // Builtin Commands
+        switch (cmd) {
+            case 'help':
+                printLine(`Available commands:`, 'info');
+                printLine(`  ls           List directory contents`);
+                printLine(`  cd <dir>     Change directory`);
+                printLine(`  cat <file>   Read file content`);
+                printLine(`  mkdir <dir>  Create directory`);
+                printLine(`  touch <file> Create file`);
+                printLine(`  rm <name>    Remove file or directory`);
+                printLine(`  echo <text>  Print text`);
+                printLine(`  clear        Clear terminal`);
+                printLine(`  repo         List available packages`);
+                printLine(`  apt-get install <pkg> Install a package`);
+                printLine(`  whoami       Print current user`);
+                printLine(`  date         Print current date`);
+                break;
+
+            case 'clear':
+                outputDiv.innerHTML = '';
+                break;
+
+            case 'ls':
+                const items = fs.ls();
+                let output = '';
+                items.forEach(item => {
+                    const style = item.type === 'dir' ? 'color:var(--secondary-color); font-weight:bold;' : (item.type === 'exec' ? 'color:var(--success-color); font-weight:bold;' : '');
+                    const suffix = item.type === 'dir' ? '/' : (item.type === 'exec' ? '*' : '');
+                    output += `<span style="${style}">${item.name}${suffix}</span>  `;
+                });
+                printHTML(output || '(empty directory)');
+                break;
+
+            case 'cd':
+                if (args.length === 0) {
+                    fs.cwd = ['home', 'guest']; // cd ~
+                } else {
+                    const target = args[0];
+                    if (target === '/') {
+                        fs.cwd = [];
+                    } else {
+                        const res = fs.resolvePath(target);
+                        if (res && res.node.type === 'dir') {
+                            // Update cwd
+                            let tempCwd = target.startsWith('/') ? [] : [...fs.cwd];
+                            let parts = target.split('/').filter(p => p.length > 0);
+                            for(let p of parts) {
+                                if(p === '..') tempCwd.pop();
+                                else if(p !== '.') tempCwd.push(p);
+                            }
+                            fs.cwd = tempCwd;
+                        } else {
+                            printLine(`cd: ${target}: No such directory`, 'error');
+                        }
+                    }
+                }
+                updatePrompt();
+                break;
+
+            case 'cat':
+                if (args.length === 0) {
+                    printLine(`usage: cat [file]`, 'error');
+                } else {
+                    const content = fs.readFile(args[0]);
+                    if (content !== null) {
+                        printLine(content);
+                    } else {
+                        printLine(`cat: ${args[0]}: No such file`, 'error');
+                    }
+                }
+                break;
+
+            case 'mkdir':
+                if (args.length === 0) {
+                    printLine(`mkdir: missing operand`, 'error');
+                } else {
+                    const res = fs.mkdir(args[0]);
+                    if (!res.success) printLine(res.msg, 'error');
+                }
+                break;
+
+            case 'touch':
+                if (args.length === 0) {
+                    printLine(`touch: missing file operand`, 'error');
+                } else {
+                    fs.touch(args[0]);
+                }
+                break;
+
+            case 'rm':
+                if (args.length === 0) {
+                    printLine(`rm: missing operand`, 'error');
+                } else {
+                    const res = fs.rm(args[0]);
+                    if (!res.success) printLine(res.msg, 'error');
+                }
+                break;
+
+            case 'echo':
+                printLine(args.join(' '));
+                break;
+
+            case 'whoami':
+                printLine('guest');
+                break;
+
+            case 'date':
+                printLine(new Date().toString());
+                break;
+
+            case 'repo':
+                printLine(`Available Packages:`, 'info');
+                printLine(`---------------------------------`);
+                for (const [name, info] of Object.entries(packageRegistry)) {
+                    printLine(`  ${name.padEnd(10)} - ${info.description}`);
+                }
+                printLine(`Install with: apt-get install <package>`);
+                break;
+
+            case 'apt-get':
+                if (args[0] === 'install') {
+                    if (args[1]) {
+                        const pkgName = args[1];
+                        if (packageRegistry[pkgName]) {
+                            printLine(`Reading package lists... Done`, 'info');
+                            printLine(`Building dependency tree... Done`, 'info');
+                            printLine(`The following NEW packages will be installed:`, 'info');
+                            printLine(`  ${pkgName}`);
+                            printLine(`0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.`);
+                            printLine(`Need to get 0 B of archives.`);
+                            printLine(`After this operation, 0 B of additional disk space will be used.`);
+                            
+                            // Install
+                            if(fs.installProgram(pkgName, packageRegistry[pkgName].script)) {
+                                printLine(`Unpacking ${pkgName}...`, 'info');
+                                printLine(`Setting up ${pkgName} (${Math.random().toFixed(2)})...`, 'success');
+                                printLine(`${pkgName} installed successfully. Run it by typing '${pkgName}'.`, 'success');
+                            }
+                        } else {
+                            printLine(`E: Unable to locate package ${pkgName}`, 'error');
+                        }
+                    } else {
+                        printLine(`apt-get install <package>`);
+                    }
+                } else {
+                    printLine(`apt-get: Command not supported (try 'apt-get install')`, 'error');
+                }
+                break;
+
+            default:
+                // Check if it's an installed executable in /usr/local/bin or /bin
+                // For simplicity, we just search the registry logic or a check
+                // But since we have a virtual FS, let's look it up in path
+                
+                let found = false;
+                
+                // Helper to run script
+                const runScript = (scriptContent) => {
+                    try {
+                        // Create a function with access to 'args' and printLine
+                        // We wrap the script content in a function body
+                        const func = new Function('args', 'printLine', 'printHTML', scriptContent);
+                        const result = func(args, printLine, printHTML);
+                        if (result) printLine(result);
+                    } catch (e) {
+                        printLine(`Runtime error: ${e.message}`, 'error');
+                    }
+                };
+
+                // Check local bin first
+                const localBin = fs.resolvePath('/usr/local/bin/' + cmd);
+                if (localBin && localBin.node.type === 'exec') {
+                    runScript(localBin.node.content);
+                    found = true;
+                } 
+                // Check system bin
+                else {
+                    const sysBin = fs.resolvePath('/bin/' + cmd);
+                    if (sysBin && sysBin.node.type === 'exec') {
+                        runScript(sysBin.node.content);
+                        found = true;
+                    }
+                }
+
+                if (!found) {
+                    printLine(`${cmd}: command not found`, 'error');
+                }
+                break;
+        }
+    }
+
+    // Helper for parsing args (handling quotes)
+    function parseArgs(str) {
+        const args = [];
+        let current = '';
+        let inQuote = false;
+        let quoteChar = '';
+        
+        for (let i = 0; i < str.length; i++) {
+            const char = str[i];
+            
+            if (inQuote) {
+                if (char === quoteChar) {
+                    inQuote = false;
+                } else {
+                    current += char;
+                }
+            } else {
+                if (char === '"' || char === "'") {
+                    inQuote = true;
+                    quoteChar = char;
+                } else if (char.trim() === '') {
+                    if (current.length > 0) {
+                        args.push(current);
+                        current = '';
+                    }
+                } else {
+                    current += char;
+                }
+            }
+        }
+        if (current.length > 0) args.push(current);
+        return args;
+    }
+
+    // Event Listeners
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const val = input.value;
+            
+            // Create a history line for the command
+            const histLine = document.createElement('div');
+            histLine.className = 'line';
+            histLine.innerHTML = `<span class="prompt">${promptLabel.innerHTML}</span> <span>${val}</span>`;
+            outputDiv.appendChild(histLine);
+            
+            input.value = '';
+            executeCommand(val);
+            scrollToBottom();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (historyIndex > 0) {
+                historyIndex--;
+                input.value = history[historyIndex];
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                input.value = history[historyIndex];
+            } else {
+                historyIndex = history.length;
+                input.value = '';
+            }
+        }
+    });
+
+    // Focus input on load
+    window.onload = focusInput;
+
+</script>
+</body>
+</html>
