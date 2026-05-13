@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Terminal Simulator</title>
+    <title>Ultimate Web Terminal (Pyodide + Simulation)</title>
+    <!-- Load Pyodide from CDN -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
     <style>
         :root {
             --bg-color: #1e1e1e;
@@ -17,111 +19,37 @@
             --prompt-user: #4ec9b0;
             --prompt-host: #569cd6;
             --prompt-path: #ce9178;
-            --caret-color: #d4d4d4;
+            --python-prompt: #ffd700;
             --font-stack: 'Consolas', 'Monaco', 'Courier New', monospace;
+            --gimp-header: #565656;
+            --gimp-bg: #333333;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { height: 100%; width: 100%; background-color: var(--bg-color); color: var(--text-color); font-family: var(--font-stack); font-size: 14px; overflow: hidden; }
 
-        body, html {
-            height: 100%;
-            width: 100%;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: var(--font-stack);
-            font-size: 14px;
-            overflow: hidden;
-        }
-
-        /* Layout */
-        .container {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        /* Top Bar / Window Controls */
+        .container { display: flex; flex-direction: column; height: 100vh; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        
         .terminal-window {
-            flex: 1;
-            background-color: var(--term-bg);
-            border-radius: 8px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            border: 1px solid #333;
+            flex: 1; background-color: var(--term-bg); border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;
+            overflow: hidden; border: 1px solid #333; position: relative; z-index: 10;
         }
 
         .terminal-header {
-            background-color: #2d2d2d;
-            padding: 10px 15px;
-            display: flex;
-            align-items: center;
-            border-bottom: 1px solid #333;
+            background-color: #2d2d2d; padding: 10px 15px; display: flex; align-items: center; border-bottom: 1px solid #333;
         }
 
-        .window-controls {
-            display: flex;
-            gap: 8px;
-        }
+        .window-controls { display: flex; gap: 8px; }
+        .control { width: 12px; height: 12px; border-radius: 50%; }
+        .close { background-color: #ff5f56; } .minimize { background-color: #ffbd2e; } .maximize { background-color: #27c93f; }
+        .terminal-title { margin-left: 20px; color: #999; font-size: 12px; flex-grow: 1; text-align: center; margin-right: 40px; }
 
-        .control {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-        }
+        .terminal-body { flex: 1; padding: 15px; overflow-y: auto; cursor: text; }
+        .terminal-body::-webkit-scrollbar { width: 10px; }
+        .terminal-body::-webkit-scrollbar-thumb { background: #333; border-radius: 5px; }
 
-        .close { background-color: #ff5f56; }
-        .minimize { background-color: #ffbd2e; }
-        .maximize { background-color: #27c93f; }
-
-        .terminal-title {
-            margin-left: 20px;
-            color: #999;
-            font-size: 12px;
-            flex-grow: 1;
-            text-align: center;
-            margin-right: 40px; /* Balance the controls on left */
-        }
-
-        /* Terminal Content Area */
-        .terminal-body {
-            flex: 1;
-            padding: 15px;
-            overflow-y: auto;
-            cursor: text;
-        }
-
-        /* Scrollbar styling */
-        .terminal-body::-webkit-scrollbar {
-            width: 10px;
-        }
-        .terminal-body::-webkit-scrollbar-track {
-            background: var(--term-bg);
-        }
-        .terminal-body::-webkit-scrollbar-thumb {
-            background: #333;
-            border-radius: 5px;
-        }
-        .terminal-body::-webkit-scrollbar-thumb:hover {
-            background: #444;
-        }
-
-        /* Output Lines */
-        .line {
-            margin-bottom: 5px;
-            line-height: 1.5;
-            word-wrap: break-word;
-            white-space: pre-wrap;
-        }
-
+        .line { margin-bottom: 5px; line-height: 1.5; word-wrap: break-word; white-space: pre-wrap; }
         .output { color: var(--text-color); }
         .error { color: var(--error-color); }
         .success { color: var(--success-color); }
@@ -129,49 +57,90 @@
         .directory { color: var(--secondary-color); font-weight: bold; }
         .executable { color: var(--success-color); font-weight: bold; }
 
-        /* Prompt */
-        .prompt-line {
-            display: flex;
-            align-items: center;
-        }
-
-        .prompt {
-            margin-right: 8px;
-            white-space: nowrap;
-        }
-
+        .prompt-line { display: flex; align-items: center; }
+        .prompt { margin-right: 8px; white-space: nowrap; }
         .user { color: var(--prompt-user); font-weight: bold; }
-        .at { color: var(--text-color); }
         .host { color: var(--prompt-host); font-weight: bold; }
-        .colon { color: var(--text-color); }
         .path { color: var(--prompt-path); }
-        .symbol { color: var(--text-color); }
+        .python-prompt { color: var(--python-prompt); font-weight: bold; margin-right: 8px; }
 
-        /* Input Area */
         #cmd-input {
-            background: transparent;
-            border: none;
-            color: var(--text-color);
-            font-family: var(--font-stack);
-            font-size: 14px;
-            flex: 1;
-            outline: none;
-            caret-color: var(--caret-color);
+            background: transparent; border: none; color: var(--text-color);
+            font-family: var(--font-stack); font-size: 14px; flex: 1;
+            outline: none; caret-color: #d4d4d4;
         }
 
-        /* Mobile adjustments */
+        /* --- GIMP GUI SIMULATION --- */
+        #gimp-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 1000;
+            display: none; align-items: center; justify-content: center;
+        }
+
+        .gimp-window {
+            width: 600px; height: 450px;
+            background-color: var(--gimp-bg);
+            border: 1px solid #000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            display: flex; flex-direction: column;
+            font-family: sans-serif;
+        }
+
+        .gimp-titlebar {
+            background: linear-gradient(to bottom, #6e6e6e, #4a4a4a);
+            padding: 5px 10px; color: white; font-size: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+            cursor: default;
+        }
+        
+        .gimp-menubar {
+            background: var(--gimp-header); color: #ddd; padding: 2px 5px;
+            font-size: 12px; border-bottom: 1px solid #222;
+        }
+        .gimp-menubar span { margin-right: 10px; cursor: pointer; }
+        .gimp-menubar span:hover { color: white; }
+
+        .gimp-toolbar {
+            background: #4a4a4a; padding: 5px; border-bottom: 1px solid #222;
+            display: flex; gap: 5px;
+        }
+
+        .gimp-tool-btn {
+            width: 24px; height: 24px; background: #777; border: 1px solid #555;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; color: white; cursor: pointer;
+        }
+        .gimp-tool-btn.active { background: #aaccff; color: black; }
+
+        .gimp-workspace {
+            flex: 1; background: #505050;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; position: relative;
+        }
+
+        .gimp-canvas-container {
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            background: white; width: 300px; height: 200px;
+            display: flex; flex-direction: column;
+        }
+
+        .gimp-canvas-area {
+            flex: 1; padding: 10px; overflow: hidden;
+            font-family: monospace; font-size: 10px; color: black;
+            white-space: pre-wrap; word-break: break-all;
+        }
+
+        .gimp-statusbar {
+            background: #333; color: #aaa; padding: 2px 5px;
+            font-size: 10px; border-top: 1px solid #222;
+            display: flex; justify-content: space-between;
+        }
+
+        /* Mobile */
         @media (max-width: 600px) {
             .container { padding: 0; border-radius: 0; }
             .terminal-window { border-radius: 0; border: none; height: 100vh; }
-        }
-
-        /* Animation for opening */
-        .terminal-window {
-            animation: fadeIn 0.5s ease-out;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.98); }
-            to { opacity: 1; transform: scale(1); }
+            .gimp-window { width: 95%; height: 80%; }
         }
     </style>
 </head>
@@ -185,7 +154,7 @@
                 <div class="control minimize"></div>
                 <div class="control maximize"></div>
             </div>
-            <div class="terminal-title">guest@webterm:~</div>
+            <div class="terminal-title">guest@webterm:~ (Fixed Python Execution)</div>
         </div>
         <div class="terminal-body" id="terminal-body" onclick="focusInput()">
             <div id="output"></div>
@@ -199,170 +168,128 @@
     </div>
 </div>
 
+<!-- GIMP GUI Simulation -->
+<div id="gimp-overlay">
+    <div class="gimp-window">
+        <div class="gimp-titlebar">
+            <span>GNU Image Manipulation Program</span>
+            <span style="cursor:pointer" onclick="closeGIMP()">X</span>
+        </div>
+        <div class="gimp-menubar">
+            <span>File</span><span>Edit</span><span>Select</span><span>View</span><span>Image</span><span>Layer</span><span>Colors</span><span>Filters</span><span>Windows</span><span>Help</span>
+        </div>
+        <div class="gimp-toolbar">
+            <div class="gimp-tool-btn active" title="Move">M</div>
+            <div class="gimp-tool-btn" title="Rectangle Select">R</div>
+            <div class="gimp-tool-btn" title="Text">T</div>
+            <div class="gimp-tool-btn" title="Eraser">E</div>
+        </div>
+        <div class="gimp-workspace">
+            <div class="gimp-canvas-container">
+                <div id="gimp-canvas" class="gimp-canvas-area"></div>
+            </div>
+        </div>
+        <div class="gimp-statusbar">
+            <span id="gimp-filename">Untitled</span>
+            <span>RGB 300x200</span>
+        </div>
+    </div>
+</div>
+
 <script>
-    /* --- File System Implementation --- */
-    
+    /* --- 1. FILE SYSTEM & STATE --- */
     class FileSystem {
         constructor() {
             this.root = {
                 type: 'dir',
                 content: {
-                    'home': {
-                        type: 'dir',
-                        content: {
-                            'guest': {
-                                type: 'dir',
-                                content: {
-                                    'welcome.txt': { type: 'file', content: 'Welcome to WebTerm v1.0!\nA fully functional simulated terminal for the web.\nType "help" to see available commands.' },
-                                    'projects': { type: 'dir', content: {} }
-                                }
-                            }
-                        }
-                    },
-                    'bin': {
-                        type: 'dir',
-                        content: {
-                            'echo': { type: 'exec', content: 'builtin' },
-                            'ls': { type: 'exec', content: 'builtin' },
-                            'cd': { type: 'exec', content: 'builtin' },
-                            'cat': { type: 'exec', content: 'builtin' },
-                            'mkdir': { type: 'exec', content: 'builtin' },
-                            'touch': { type: 'exec', content: 'builtin' },
-                            'rm': { type: 'exec', content: 'builtin' },
-                            'clear': { type: 'exec', content: 'builtin' },
-                            'whoami': { type: 'exec', content: 'builtin' },
-                            'date': { type: 'exec', content: 'builtin' },
-                            'apt-get': { type: 'exec', content: 'builtin' }, // Package manager
-                            'repo': { type: 'exec', content: 'builtin' }   // App store list
-                        }
-                    },
-                    'etc': {
-                        type: 'dir',
-                        content: {
-                            'os-release': { type: 'file', content: 'PRETTY_NAME="WebTerm OS 1.0"\nVERSION="2023.10.05 (Stable)"' }
-                        }
-                    },
-                    'usr': {
-                        type: 'dir',
-                        content: {
-                            'local': {
-                                type: 'dir',
-                                content: {
-                                    'bin': { type: 'dir', content: {} } // Installed apps go here
-                                }
-                            }
-                        }
-                    }
+                    'home': { type: 'dir', content: { 'guest': { type: 'dir', content: {
+                        'welcome.txt': { type: 'file', content: 'Welcome to WebTerm v3.1!\nFixed: python script.py now works correctly.' },
+                        'image_data.txt': { type: 'file', content: 'Edit this in GIMP!' },
+                        'script.py': { type: 'file', content: 'import math\nprint("Hello from script.py!")\nprint(f"Square root of 16 is {math.sqrt(16)}")' },
+                        'projects': { type: 'dir', content: {} }
+                    } } } },
+                    'bin': { type: 'dir', content: {
+                        'ls': { type: 'exec', content: 'builtin' },
+                        'cd': { type: 'exec', content: 'builtin' },
+                        'cat': { type: 'exec', content: 'builtin' },
+                        'mkdir': { type: 'exec', content: 'builtin' },
+                        'touch': { type: 'exec', content: 'builtin' },
+                        'rm': { type: 'exec', content: 'builtin' },
+                        'echo': { type: 'exec', content: 'builtin' },
+                        'clear': { type: 'exec', content: 'builtin' },
+                        'whoami': { type: 'exec', content: 'builtin' },
+                        'date': { type: 'exec', content: 'builtin' },
+                        'apt-get': { type: 'exec', content: 'builtin' },
+                        'repo': { type: 'exec', content: 'builtin' },
+                        'python': { type: 'exec', content: 'builtin_py' }
+                    } },
+                    'etc': { type: 'dir', content: { 'os-release': { type: 'file', content: 'WebTerm OS 3.1' } } },
+                    'usr': { type: 'dir', content: { 'local': { type: 'dir', content: { 'bin': { type: 'dir', content: {} } } } } }
                 }
             };
-            
-            // Current working directory path stack (e.g., ['home', 'guest'])
             this.cwd = ['home', 'guest'];
         }
 
-        // Resolve a path (absolute or relative) to a directory object
         resolvePath(pathStr) {
-            let parts = pathStr.split('/').filter(p => p !== '' && p !== '.');
-            let current = pathStr.startsWith('/') ? this.root : this.getCurrentDir();
-
-            for (let part of parts) {
-                if (part === '..') {
-                    if (this.cwd.length > 0 && !pathStr.startsWith('/')) {
-                        // Simplified traversal: We rebuild from root if '..' is at root level
-                        // Ideally we track parent pointers, but let's use the stack for relative
-                        // Note: resolvePath creates a reference, not mutating this.cwd directly yet
-                    }
-                    // Logic for absolute vs relative '..' is tricky in this simplified structure
-                    // Let's refactor resolvePath to handle the stack logic safely
-                }
-            }
-            
-            // Robust Path Resolution
             let tempCwd = pathStr.startsWith('/') ? [] : [...this.cwd];
-            let pathParts = pathStr.split('/').filter(p => p.length > 0);
-            
-            for (let part of pathParts) {
-                if (part === '..') {
-                    tempCwd.pop();
-                } else if (part !== '.') {
-                    tempCwd.push(part);
-                }
-            }
-            
-            // Traverse
+            pathStr.split('/').filter(p=>p).forEach(p => p==='..'?tempCwd.pop() : (p!=='.' && tempCwd.push(p)));
             let node = this.root;
-            for (let part of tempCwd) {
-                if (node.content && node.content[part]) {
-                    node = node.content[part];
-                } else {
-                    return null; // Not found
-                }
+            for (let p of tempCwd) {
+                if (node.content && node.content[p]) node = node.content[p];
+                else return null;
             }
             return { node, pathStr: '/' + tempCwd.join('/') };
         }
 
         getCurrentDir() {
-            let node = this.root;
-            for (let part of this.cwd) {
-                if (node.content[part]) node = node.content[part];
-                else return this.root; // Fallback
-            }
-            return node;
+            let n = this.root; 
+            for(let p of this.cwd) if(n.content[p]) n=n.content[p]; 
+            return n;
         }
 
-        getPathString() {
-            if (this.cwd.length === 0) return '/';
-            // Simplified: usually home is shown as ~
-            const joined = this.cwd.join('/');
-            if (joined.startsWith('home/guest')) {
-                return '~' + joined.substring(10);
-            }
-            return '/' + joined;
+        getPathString() { 
+            const j=this.cwd.join('/'); 
+            return j.startsWith('home/guest') ? '~'+j.substring(10) : '/'+j; 
+        }
+
+        ls() { 
+            return Object.keys(this.getCurrentDir().content).map(k => ({name:k, type:this.getCurrentDir().content[k].type})); 
         }
 
         mkdir(name) {
-            const current = this.getCurrentDir();
-            if (current.content[name]) return { success: false, msg: `File or directory '${name}' already exists.` };
-            current.content[name] = { type: 'dir', content: {} };
+            const c = this.getCurrentDir();
+            if(c.content[name]) return { success: false, msg: "Exists" };
+            c.content[name] = { type: 'dir', content: {} };
             return { success: true };
         }
 
         touch(name) {
-            const current = this.getCurrentDir();
-            current.content[name] = { type: 'file', content: '' };
+            this.getCurrentDir().content[name] = { type: 'file', content: '' };
             return { success: true };
         }
 
-        writeToFile(path, content) {
-            const res = this.resolvePath(path);
-            if (!res) return { success: false, msg: `Path '${path}' not valid.` };
-            if (res.node.type !== 'file') return { success: false, msg: `'${path}' is not a file.` };
-            res.node.content = content;
+        rm(name) {
+            const c = this.getCurrentDir();
+            if(!c.content[name]) return { success: false, msg: "No such file" };
+            delete c.content[name];
             return { success: true };
         }
 
         readFile(path) {
-            const res = this.resolvePath(path);
-            if (!res || res.node.type === 'dir') return null;
-            return res.node.content;
+            const r = this.resolvePath(path);
+            return r && r.node.type === 'file' ? r.node.content : null;
         }
 
-        ls() {
-            const current = this.getCurrentDir();
-            return Object.keys(current.content).map(name => {
-                const node = current.content[name];
-                return { name, type: node.type };
-            });
+        writeFile(path, content) {
+            const r = this.resolvePath(path);
+            if(r && r.node.type === 'file') {
+                r.node.content = content;
+                return true;
+            }
+            return false;
         }
 
-        rm(name) {
-            const current = this.getCurrentDir();
-            if (!current.content[name]) return { success: false, msg: `Cannot remove '${name}': No such file or directory.` };
-            delete current.content[name];
-            return { success: true };
-        }
-        
-        // Install a "program" (adds an executable file to /usr/local/bin)
         installProgram(name, scriptContent) {
             const binPath = this.resolvePath('/usr/local/bin');
             if(binPath && binPath.node.type === 'dir') {
@@ -373,368 +300,265 @@
         }
     }
 
-    /* --- Package Registry (Simulated Apt) --- */
-    const packageRegistry = {
-        'cowsay': {
-            description: 'Speaking cow interface',
-            script: `
-                const text = args.join(' ') || 'Moo?';
-                const line = '_'.repeat(text.length + 4);
-                return \`
- < \${text} >
-  \${line}
-        \\   ^__^
-         \\  (oo)\\_______
-            (__)\\       )\\/\\
-                ||----w |
-                ||     ||
-                \`;
-            `
-        },
-        'matrix': {
-            description: 'Displays a cool matrix animation (simulated)',
-            script: `
-                return "The Matrix has you...\\n(Visual effects not supported in this stream)";
-            `
-        },
-        'fortune': {
-            description: 'Prints a random fortune',
-            script: `
-                const fortunes = [
-                    "The best way to predict the future is to invent it.",
-                    "Do or do not. There is no try.",
-                    "To be or not to be?",
-                    "Hello, World!",
-                    "Keep calm and compile on."
-                ];
-                return fortunes[Math.floor(Math.random() * fortunes.length)];
-            `
-        },
-        'joke': {
-            description: 'Tells a programming joke',
-            script: `
-                return "Why do programmers prefer dark mode?\\nBecause light attracts bugs.";
-            `
-        }
-    };
-
-    /* --- Terminal Logic --- */
-
     const fs = new FileSystem();
-    const outputDiv = document.getElementById('output');
-    const input = document.getElementById('cmd-input');
-    const promptLabel = document.getElementById('prompt-label');
-    const terminalBody = document.getElementById('terminal-body');
-
+    let shellMode = 'bash'; // 'bash' or 'python'
+    let pyodide = null;
+    let pyodideReady = false;
     let history = [];
     let historyIndex = -1;
 
-    // Initial Message
-    printLine(`WebTerm OS [Version 1.0.0]`, 'info');
-    printLine(`(c) 2023 WebTerm Corporation. All rights reserved.`, 'info');
-    printLine(`Type 'help' for available commands or 'repo' to install apps.\n`);
-
-    function updatePrompt() {
-        const pathStr = fs.getPathString();
-        promptLabel.innerHTML = `<span class="user">guest</span><span class="at">@</span><span class="host">webterm</span><span class="colon">:</span><span class="path">${pathStr}</span><span class="symbol">$</span>`;
+    /* --- 2. PYODIDE INTEGRATION --- */
+    async function initPyodide() {
+        if (pyodide) return;
+        printLine("Initializing Python environment (Pyodide)... Downloading WASM (~10MB).", "info");
+        try {
+            pyodide = await loadPyodide();
+            pyodide.setStdout({ batched: (msg) => printLine(msg) });
+            pyodide.setStderr({ batched: (msg) => printLine(msg, 'error') });
+            await pyodide.loadPackage("micropip");
+            pyodideReady = true;
+            printLine("Python 3.11 loaded successfully.", "success");
+        } catch (err) {
+            printLine("Error loading Python: " + err.message, "error");
+        }
     }
+
+    async function runPython(code) {
+        if (!pyodideReady) {
+            await initPyodide();
+            if (!pyodideReady) return;
+        }
+        try {
+            let result = await pyodide.runPythonAsync(code);
+            if (result !== undefined && result !== null) {
+                printLine(String(result));
+            }
+        } catch (err) {
+            if (err.message.includes("SystemExit")) {
+                shellMode = 'bash';
+                updatePrompt();
+            } else {
+                printLine(String(err), 'error');
+            }
+        }
+    }
+
+    /* --- 3. PACKAGE REGISTRY (Simulated Apps) --- */
+    const packageRegistry = {
+        'cowsay': {
+            description: 'Speaking cow interface',
+            script: `const text = args.join(' ') || 'Moo?'; return \` < \${text} >  \${'_'.repeat(text.length+4)}         \\\\   ^__^          \\\\  (oo)\\\\_______             (__)\\\\       )\\\\/\\\\                 ||----w |                 ||     ||                \`;`
+        },
+        'matrix': {
+            description: 'Displays a cool matrix animation',
+            script: `return "The Matrix has you... (Simulated)";`
+        },
+        'fortune': {
+            description: 'Prints a random fortune',
+            script: `const f = ["The best way to predict the future is to invent it.", "Do or do not.", "Keep calm and compile on."]; return f[Math.floor(Math.random() * f.length)];`
+        },
+        'joke': {
+            description: 'Tells a programming joke',
+            script: `return "Why do programmers prefer dark mode?\\nBecause light attracts bugs.";`
+        },
+        'gimp': {
+            description: 'GNU Image Manipulation Program (GUI)',
+            script: `openGIMP(args); return "Launching GIMP GUI...";`
+        }
+    };
+
+    /* --- 4. GIMP GUI LOGIC --- */
+    let currentEditingFile = null;
+    const gimpOverlay = document.getElementById('gimp-overlay');
+    const gimpCanvas = document.getElementById('gimp-canvas');
+    const gimpFilename = document.getElementById('gimp-filename');
+
+    window.openGIMP = function(args) {
+        const filename = args[0] || 'Untitled.txt';
+        let content = "";
+        const fileContent = fs.readFile(filename);
+        if (fileContent !== null) {
+            content = fileContent; currentEditingFile = filename;
+        } else { currentEditingFile = null; }
+        gimpFilename.textContent = filename + (currentEditingFile ? "" : " (New)");
+        gimpCanvas.textContent = content;
+        gimpOverlay.style.display = 'flex';
+        gimpCanvas.oncontextmenu = function(e) {
+            e.preventDefault();
+            const save = confirm("Save changes?");
+            if (save) {
+                const newContent = gimpCanvas.textContent;
+                if (currentEditingFile) fs.writeFile(currentEditingFile, newContent);
+                else { fs.touch("new_image.txt"); fs.writeFile("new_image.txt", newContent); }
+                printLine(`File saved.`, 'success');
+                closeGIMP();
+            }
+        };
+    };
+    window.closeGIMP = function() { gimpOverlay.style.display = 'none'; };
+
+    /* --- 5. UI HELPERS --- */
+    const outputDiv = document.getElementById('output');
+    const input = document.getElementById('cmd-input');
+    const promptLabel = document.getElementById('prompt-label');
 
     function printLine(text, className = 'output') {
         const line = document.createElement('div');
         line.className = `line ${className}`;
         line.textContent = text;
         outputDiv.appendChild(line);
-        scrollToBottom();
+        document.getElementById('terminal-body').scrollTop = document.getElementById('terminal-body').scrollHeight;
     }
 
-    function printHTML(html) {
-        const line = document.createElement('div');
-        line.className = 'line output';
-        line.innerHTML = html;
-        outputDiv.appendChild(line);
-        scrollToBottom();
+    function focusInput() { input.focus(); }
+
+    function updatePrompt() {
+        if (shellMode === 'python') {
+            promptLabel.innerHTML = `<span class="python-prompt">>>></span>`;
+        } else {
+            promptLabel.innerHTML = `<span class="user">guest</span><span class="at">@</span><span class="host">webterm</span><span class="colon">:</span><span class="path">${fs.getPathString()}</span><span class="symbol">$</span>`;
+        }
     }
 
-    function scrollToBottom() {
-        terminalBody.scrollTop = terminalBody.scrollHeight;
-    }
-
-    function focusInput() {
-        input.focus();
-    }
-
-    // Command Processor
+    /* --- 6. COMMAND EXECUTION (WITH FIX) --- */
     function executeCommand(rawCmd) {
-        // Split command and arguments, respecting quotes
-        const parts = parseArgs(rawCmd);
+        const parts = rawCmd.trim().split(/\s+/);
         const cmd = parts[0];
         const args = parts.slice(1);
+        
+        if (!rawCmd.trim()) return;
 
-        if (!cmd) return;
-
-        // Add to history
         history.push(rawCmd);
         historyIndex = history.length;
 
-        // Builtin Commands
+        // Echo command
+        const histLine = document.createElement('div');
+        histLine.className = 'line';
+        histLine.innerHTML = `<span class="prompt">${promptLabel.innerHTML}</span> <span>${rawCmd}</span>`;
+        outputDiv.appendChild(histLine);
+
+        if (shellMode === 'python') {
+            if (rawCmd.trim() === 'exit()') {
+                shellMode = 'bash'; updatePrompt();
+            } else { runPython(rawCmd); }
+            return;
+        }
+
+        // --- BASH MODE ---
         switch (cmd) {
-            case 'help':
-                printLine(`Available commands:`, 'info');
-                printLine(`  ls           List directory contents`);
-                printLine(`  cd <dir>     Change directory`);
-                printLine(`  cat <file>   Read file content`);
-                printLine(`  mkdir <dir>  Create directory`);
-                printLine(`  touch <file> Create file`);
-                printLine(`  rm <name>    Remove file or directory`);
-                printLine(`  echo <text>  Print text`);
-                printLine(`  clear        Clear terminal`);
-                printLine(`  repo         List available packages`);
-                printLine(`  apt-get install <pkg> Install a package`);
-                printLine(`  whoami       Print current user`);
-                printLine(`  date         Print current date`);
-                break;
-
-            case 'clear':
-                outputDiv.innerHTML = '';
-                break;
-
+            case 'help': printLine("Commands: ls, cd, cat, mkdir, touch, rm, echo, clear, python, gimp, repo, apt-get install", "info"); break;
+            case 'clear': outputDiv.innerHTML = ''; break;
             case 'ls':
                 const items = fs.ls();
-                let output = '';
-                items.forEach(item => {
-                    const style = item.type === 'dir' ? 'color:var(--secondary-color); font-weight:bold;' : (item.type === 'exec' ? 'color:var(--success-color); font-weight:bold;' : '');
-                    const suffix = item.type === 'dir' ? '/' : (item.type === 'exec' ? '*' : '');
-                    output += `<span style="${style}">${item.name}${suffix}</span>  `;
+                let out = '';
+                items.forEach(i => {
+                    const style = i.type === 'dir' ? 'color:var(--secondary-color);font-weight:bold;' : (i.type === 'exec' ? 'color:var(--success-color);font-weight:bold;' : '');
+                    out += `<span style="${style}">${i.name}</span>  `;
                 });
-                printHTML(output || '(empty directory)');
+                outputDiv.lastChild.innerHTML += `<br>${out}`;
                 break;
-
             case 'cd':
-                if (args.length === 0) {
-                    fs.cwd = ['home', 'guest']; // cd ~
-                } else {
-                    const target = args[0];
-                    if (target === '/') {
-                        fs.cwd = [];
-                    } else {
-                        const res = fs.resolvePath(target);
-                        if (res && res.node.type === 'dir') {
-                            // Update cwd
-                            let tempCwd = target.startsWith('/') ? [] : [...fs.cwd];
-                            let parts = target.split('/').filter(p => p.length > 0);
-                            for(let p of parts) {
-                                if(p === '..') tempCwd.pop();
-                                else if(p !== '.') tempCwd.push(p);
-                            }
-                            fs.cwd = tempCwd;
-                        } else {
-                            printLine(`cd: ${target}: No such directory`, 'error');
-                        }
-                    }
+                if (!args[0]) fs.cwd = ['home', 'guest'];
+                else {
+                    const res = fs.resolvePath(args[0]);
+                    if (res && res.node.type === 'dir') {
+                        let t = args[0].startsWith('/') ? [] : [...fs.cwd];
+                        args[0].split('/').filter(p=>p).forEach(p => p === '..' ? t.pop() : (p !== '.' && t.push(p)));
+                        fs.cwd = t;
+                        updatePrompt();
+                    } else printLine(`cd: ${args[0]}: No such directory`, 'error');
                 }
-                updatePrompt();
                 break;
-
             case 'cat':
-                if (args.length === 0) {
-                    printLine(`usage: cat [file]`, 'error');
-                } else {
-                    const content = fs.readFile(args[0]);
-                    if (content !== null) {
-                        printLine(content);
-                    } else {
-                        printLine(`cat: ${args[0]}: No such file`, 'error');
-                    }
-                }
+                const c = fs.readFile(args[0]);
+                c !== null ? printLine(c) : printLine(`cat: ${args[0]}: No such file`, 'error');
                 break;
-
             case 'mkdir':
-                if (args.length === 0) {
-                    printLine(`mkdir: missing operand`, 'error');
-                } else {
-                    const res = fs.mkdir(args[0]);
-                    if (!res.success) printLine(res.msg, 'error');
-                }
+                args.length ? fs.mkdir(args[0]).success || printLine(`Error creating dir`, 'error') : printLine(`usage: mkdir [dir]`, 'error');
                 break;
-
             case 'touch':
-                if (args.length === 0) {
-                    printLine(`touch: missing file operand`, 'error');
-                } else {
-                    fs.touch(args[0]);
-                }
+                args.length ? fs.touch(args[0]) : printLine(`usage: touch [file]`, 'error');
                 break;
-
             case 'rm':
-                if (args.length === 0) {
-                    printLine(`rm: missing operand`, 'error');
+                args.length ? fs.rm(args[0]).success || printLine(`Error removing`, 'error') : printLine(`usage: rm [name]`, 'error');
+                break;
+            case 'echo': printLine(args.join(' ')); break;
+            case 'whoami': printLine('guest'); break;
+            case 'date': printLine(new Date().toString()); break;
+            
+            // --- FIXED PYTHON HANDLER ---
+            case 'python':
+                // Check if we are trying to run a file
+                if (args.length > 0) {
+                    const filename = args[0];
+                    const fileContent = fs.readFile(filename);
+                    
+                    if (fileContent !== null) {
+                        if (!pyodideReady) printLine(`Running ${filename}...`, 'info');
+                        // Run the file content directly
+                        runPython(fileContent);
+                        // DO NOT switch shellMode to python, stay in bash
+                    } else {
+                        printLine(`python: can't open file '${filename}': [Errno 2] No such file or directory`, 'error');
+                    }
                 } else {
-                    const res = fs.rm(args[0]);
-                    if (!res.success) printLine(res.msg, 'error');
+                    // No arguments, enter interactive shell
+                    shellMode = 'python'; 
+                    updatePrompt();
+                    if (!pyodideReady) initPyodide();
+                    else printLine("Python 3.11 (Pyodide)", "info");
                 }
                 break;
-
-            case 'echo':
-                printLine(args.join(' '));
-                break;
-
-            case 'whoami':
-                printLine('guest');
-                break;
-
-            case 'date':
-                printLine(new Date().toString());
-                break;
-
+                
+            case 'gimp': window.openGIMP(args); break;
             case 'repo':
                 printLine(`Available Packages:`, 'info');
-                printLine(`---------------------------------`);
-                for (const [name, info] of Object.entries(packageRegistry)) {
-                    printLine(`  ${name.padEnd(10)} - ${info.description}`);
-                }
-                printLine(`Install with: apt-get install <package>`);
+                for (const [name, info] of Object.entries(packageRegistry)) printLine(`  ${name.padEnd(10)} - ${info.description}`);
                 break;
-
             case 'apt-get':
-                if (args[0] === 'install') {
-                    if (args[1]) {
-                        const pkgName = args[1];
-                        if (packageRegistry[pkgName]) {
-                            printLine(`Reading package lists... Done`, 'info');
-                            printLine(`Building dependency tree... Done`, 'info');
-                            printLine(`The following NEW packages will be installed:`, 'info');
-                            printLine(`  ${pkgName}`);
-                            printLine(`0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.`);
-                            printLine(`Need to get 0 B of archives.`);
-                            printLine(`After this operation, 0 B of additional disk space will be used.`);
-                            
-                            // Install
-                            if(fs.installProgram(pkgName, packageRegistry[pkgName].script)) {
-                                printLine(`Unpacking ${pkgName}...`, 'info');
-                                printLine(`Setting up ${pkgName} (${Math.random().toFixed(2)})...`, 'success');
-                                printLine(`${pkgName} installed successfully. Run it by typing '${pkgName}'.`, 'success');
-                            }
-                        } else {
-                            printLine(`E: Unable to locate package ${pkgName}`, 'error');
+                if (args[0] === 'install' && args[1]) {
+                    const pkg = args[1];
+                    if (packageRegistry[pkg]) {
+                        printLine(`Installing ${pkg}...`);
+                        if(fs.installProgram(pkg, packageRegistry[pkg].script)) {
+                            printLine(`${pkg} installed successfully.`, 'success');
                         }
-                    } else {
-                        printLine(`apt-get install <package>`);
-                    }
-                } else {
-                    printLine(`apt-get: Command not supported (try 'apt-get install')`, 'error');
-                }
+                    } else printLine(`E: Unable to locate package ${pkg}`, 'error');
+                } else printLine(`apt-get install <package>`);
                 break;
-
             default:
-                // Check if it's an installed executable in /usr/local/bin or /bin
-                // For simplicity, we just search the registry logic or a check
-                // But since we have a virtual FS, let's look it up in path
-                
+                // Check user installed binaries
                 let found = false;
-                
-                // Helper to run script
-                const runScript = (scriptContent) => {
-                    try {
-                        // Create a function with access to 'args' and printLine
-                        // We wrap the script content in a function body
-                        const func = new Function('args', 'printLine', 'printHTML', scriptContent);
-                        const result = func(args, printLine, printHTML);
-                        if (result) printLine(result);
-                    } catch (e) {
-                        printLine(`Runtime error: ${e.message}`, 'error');
-                    }
+                const run = (content) => {
+                    try { new Function('args', 'printLine', 'printHTML', 'openGIMP', content)(args, printLine, (h)=>{outputDiv.lastChild.innerHTML+=h}, window.openGIMP); }
+                    catch (e) { printLine(`Runtime error: ${e.message}`, 'error'); }
                 };
-
-                // Check local bin first
-                const localBin = fs.resolvePath('/usr/local/bin/' + cmd);
-                if (localBin && localBin.node.type === 'exec') {
-                    runScript(localBin.node.content);
-                    found = true;
-                } 
-                // Check system bin
-                else {
-                    const sysBin = fs.resolvePath('/bin/' + cmd);
-                    if (sysBin && sysBin.node.type === 'exec') {
-                        runScript(sysBin.node.content);
-                        found = true;
-                    }
-                }
-
-                if (!found) {
-                    printLine(`${cmd}: command not found`, 'error');
-                }
-                break;
+                let loc = fs.resolvePath('/usr/local/bin/'+cmd);
+                if (loc && loc.node.type === 'exec') { run(loc.node.content); found=true; }
+                if (!found) printLine(`${cmd}: command not found`, 'error');
         }
+        document.getElementById('terminal-body').scrollTop = document.getElementById('terminal-body').scrollHeight;
     }
 
-    // Helper for parsing args (handling quotes)
-    function parseArgs(str) {
-        const args = [];
-        let current = '';
-        let inQuote = false;
-        let quoteChar = '';
-        
-        for (let i = 0; i < str.length; i++) {
-            const char = str[i];
-            
-            if (inQuote) {
-                if (char === quoteChar) {
-                    inQuote = false;
-                } else {
-                    current += char;
-                }
-            } else {
-                if (char === '"' || char === "'") {
-                    inQuote = true;
-                    quoteChar = char;
-                } else if (char.trim() === '') {
-                    if (current.length > 0) {
-                        args.push(current);
-                        current = '';
-                    }
-                } else {
-                    current += char;
-                }
-            }
-        }
-        if (current.length > 0) args.push(current);
-        return args;
-    }
-
-    // Event Listeners
+    /* --- 7. INPUT HANDLING --- */
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             const val = input.value;
-            
-            // Create a history line for the command
-            const histLine = document.createElement('div');
-            histLine.className = 'line';
-            histLine.innerHTML = `<span class="prompt">${promptLabel.innerHTML}</span> <span>${val}</span>`;
-            outputDiv.appendChild(histLine);
-            
             input.value = '';
             executeCommand(val);
-            scrollToBottom();
         } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (historyIndex > 0) {
-                historyIndex--;
-                input.value = history[historyIndex];
-            }
+            e.preventDefault(); if (historyIndex>0) input.value = history[--historyIndex];
         } else if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            if (historyIndex < history.length - 1) {
-                historyIndex++;
-                input.value = history[historyIndex];
-            } else {
-                historyIndex = history.length;
-                input.value = '';
-            }
+            e.preventDefault(); if (historyIndex<history.length-1) input.value = history[++historyIndex]; else input.value = '';
         }
     });
 
-    // Focus input on load
-    window.onload = focusInput;
+    // Init
+    printLine("WebTerm OS [Ultimate Edition]", "info");
+    printLine("Fixed: python script.py works now.", "info");
+    printLine("Type 'repo' to install apps or 'python' for coding.", "info");
+    updatePrompt();
+    focusInput();
 
 </script>
 </body>
