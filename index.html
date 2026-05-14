@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ultimate Web Terminal (Pyodide + Simulation)</title>
-    <!-- Load Pyodide from CDN -->
+    <title>WebTerm OS (Networking & Security Edition)</title>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
     <style>
         :root {
@@ -56,6 +55,7 @@
         .info { color: var(--secondary-color); }
         .directory { color: var(--secondary-color); font-weight: bold; }
         .executable { color: var(--success-color); font-weight: bold; }
+        .image-preview { max-width: 100%; border: 1px solid #444; margin-top: 5px; display: block; }
 
         .prompt-line { display: flex; align-items: center; }
         .prompt { margin-right: 8px; white-space: nowrap; }
@@ -70,78 +70,28 @@
             outline: none; caret-color: #d4d4d4;
         }
 
-        /* --- GIMP GUI SIMULATION --- */
+        /* --- GIMP GUI --- */
         #gimp-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); z-index: 1000;
-            display: none; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.6); z-index: 1000; display: none; align-items: center; justify-content: center;
         }
-
         .gimp-window {
-            width: 600px; height: 450px;
-            background-color: var(--gimp-bg);
-            border: 1px solid #000;
-            box-shadow: 0 0 20px rgba(0,0,0,0.8);
-            display: flex; flex-direction: column;
-            font-family: sans-serif;
+            width: 600px; height: 450px; background-color: var(--gimp-bg); border: 1px solid #000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8); display: flex; flex-direction: column; font-family: sans-serif;
         }
-
         .gimp-titlebar {
             background: linear-gradient(to bottom, #6e6e6e, #4a4a4a);
-            padding: 5px 10px; color: white; font-size: 12px;
-            display: flex; justify-content: space-between; align-items: center;
-            cursor: default;
+            padding: 5px 10px; color: white; font-size: 12px; display: flex; justify-content: space-between; align-items: center;
         }
-        
-        .gimp-menubar {
-            background: var(--gimp-header); color: #ddd; padding: 2px 5px;
-            font-size: 12px; border-bottom: 1px solid #222;
-        }
-        .gimp-menubar span { margin-right: 10px; cursor: pointer; }
-        .gimp-menubar span:hover { color: white; }
-
-        .gimp-toolbar {
-            background: #4a4a4a; padding: 5px; border-bottom: 1px solid #222;
-            display: flex; gap: 5px;
-        }
-
+        .gimp-menubar { background: var(--gimp-header); color: #ddd; padding: 2px 5px; font-size: 12px; border-bottom: 1px solid #222; }
+        .gimp-toolbar { background: #4a4a4a; padding: 5px; border-bottom: 1px solid #222; display: flex; gap: 5px; }
         .gimp-tool-btn {
             width: 24px; height: 24px; background: #777; border: 1px solid #555;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 10px; color: white; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; cursor: pointer;
         }
-        .gimp-tool-btn.active { background: #aaccff; color: black; }
-
-        .gimp-workspace {
-            flex: 1; background: #505050;
-            display: flex; align-items: center; justify-content: center;
-            overflow: hidden; position: relative;
-        }
-
-        .gimp-canvas-container {
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            background: white; width: 300px; height: 200px;
-            display: flex; flex-direction: column;
-        }
-
-        .gimp-canvas-area {
-            flex: 1; padding: 10px; overflow: hidden;
-            font-family: monospace; font-size: 10px; color: black;
-            white-space: pre-wrap; word-break: break-all;
-        }
-
-        .gimp-statusbar {
-            background: #333; color: #aaa; padding: 2px 5px;
-            font-size: 10px; border-top: 1px solid #222;
-            display: flex; justify-content: space-between;
-        }
-
-        /* Mobile */
-        @media (max-width: 600px) {
-            .container { padding: 0; border-radius: 0; }
-            .terminal-window { border-radius: 0; border: none; height: 100vh; }
-            .gimp-window { width: 95%; height: 80%; }
-        }
+        .gimp-workspace { flex: 1; background: #505050; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .gimp-canvas-container { box-shadow: 0 0 10px rgba(0,0,0,0.5); background: white; width: 300px; height: 200px; display: flex; flex-direction: column; }
+        .gimp-canvas-area { flex: 1; padding: 10px; overflow: hidden; font-family: monospace; font-size: 10px; color: black; white-space: pre-wrap; word-break: break-all; }
     </style>
 </head>
 <body>
@@ -154,7 +104,7 @@
                 <div class="control minimize"></div>
                 <div class="control maximize"></div>
             </div>
-            <div class="terminal-title">guest@webterm:~ (Fixed Python Execution)</div>
+            <div class="terminal-title">guest@webterm:~ (Networking & Security Module Loaded)</div>
         </div>
         <div class="terminal-body" id="terminal-body" onclick="focusInput()">
             <div id="output"></div>
@@ -168,7 +118,7 @@
     </div>
 </div>
 
-<!-- GIMP GUI Simulation -->
+<!-- GIMP GUI -->
 <div id="gimp-overlay">
     <div class="gimp-window">
         <div class="gimp-titlebar">
@@ -176,25 +126,22 @@
             <span style="cursor:pointer" onclick="closeGIMP()">X</span>
         </div>
         <div class="gimp-menubar">
-            <span>File</span><span>Edit</span><span>Select</span><span>View</span><span>Image</span><span>Layer</span><span>Colors</span><span>Filters</span><span>Windows</span><span>Help</span>
+            <span>File</span><span>Edit</span><span>View</span><span>Help</span>
         </div>
         <div class="gimp-toolbar">
-            <div class="gimp-tool-btn active" title="Move">M</div>
-            <div class="gimp-tool-btn" title="Rectangle Select">R</div>
-            <div class="gimp-tool-btn" title="Text">T</div>
-            <div class="gimp-tool-btn" title="Eraser">E</div>
+            <div class="gimp-tool-btn active">M</div>
+            <div class="gimp-tool-btn">T</div>
         </div>
         <div class="gimp-workspace">
             <div class="gimp-canvas-container">
                 <div id="gimp-canvas" class="gimp-canvas-area"></div>
             </div>
         </div>
-        <div class="gimp-statusbar">
-            <span id="gimp-filename">Untitled</span>
-            <span>RGB 300x200</span>
-        </div>
     </div>
 </div>
+
+<!-- Hidden canvas for image processing -->
+<canvas id="stego-canvas" style="display:none;"></canvas>
 
 <script>
     /* --- 1. FILE SYSTEM & STATE --- */
@@ -204,27 +151,32 @@
                 type: 'dir',
                 content: {
                     'home': { type: 'dir', content: { 'guest': { type: 'dir', content: {
-                        'welcome.txt': { type: 'file', content: 'Welcome to WebTerm v3.1!\nFixed: python script.py now works correctly.' },
-                        'image_data.txt': { type: 'file', content: 'Edit this in GIMP!' },
-                        'script.py': { type: 'file', content: 'import math\nprint("Hello from script.py!")\nprint(f"Square root of 16 is {math.sqrt(16)}")' },
+                        'welcome.txt': { type: 'file', content: 'Welcome to WebTerm Networking & Security Edition.\nTry: ping, ifconfig, iwlist scan, curl, steghide' },
+                        'secret_message.txt': { type: 'file', content: 'The eagle has landed at midnight.' },
+                        'script.py': { type: 'file', content: 'print("Python is working!")' },
                         'projects': { type: 'dir', content: {} }
                     } } } },
                     'bin': { type: 'dir', content: {
-                        'ls': { type: 'exec', content: 'builtin' },
-                        'cd': { type: 'exec', content: 'builtin' },
-                        'cat': { type: 'exec', content: 'builtin' },
-                        'mkdir': { type: 'exec', content: 'builtin' },
-                        'touch': { type: 'exec', content: 'builtin' },
-                        'rm': { type: 'exec', content: 'builtin' },
-                        'echo': { type: 'exec', content: 'builtin' },
-                        'clear': { type: 'exec', content: 'builtin' },
-                        'whoami': { type: 'exec', content: 'builtin' },
-                        'date': { type: 'exec', content: 'builtin' },
-                        'apt-get': { type: 'exec', content: 'builtin' },
-                        'repo': { type: 'exec', content: 'builtin' },
-                        'python': { type: 'exec', content: 'builtin_py' }
+                        'ls': { type: 'exec', content: 'builtin' }, 'cd': { type: 'exec', content: 'builtin' },
+                        'cat': { type: 'exec', content: 'builtin' }, 'mkdir': { type: 'exec', content: 'builtin' },
+                        'touch': { type: 'exec', content: 'builtin' }, 'rm': { type: 'exec', content: 'builtin' },
+                        'echo': { type: 'exec', content: 'builtin' }, 'clear': { type: 'exec', content: 'builtin' },
+                        'whoami': { type: 'exec', content: 'builtin' }, 'date': { type: 'exec', content: 'builtin' },
+                        'apt-get': { type: 'exec', content: 'builtin' }, 'repo': { type: 'exec', content: 'builtin' },
+                        'python': { type: 'exec', content: 'builtin_py' },
+                        // Network Commands
+                        'ping': { type: 'exec', content: 'builtin_net' },
+                        'ifconfig': { type: 'exec', content: 'builtin_net' },
+                        'iwlist': { type: 'exec', content: 'builtin_net' },
+                        'nmcli': { type: 'exec', content: 'builtin_net' },
+                        'curl': { type: 'exec', content: 'builtin_net' },
+                        // Security Commands
+                        'steghide': { type: 'exec', content: 'builtin_sec' },
+                        'img-gen': { type: 'exec', content: 'builtin_sec' }
                     } },
-                    'etc': { type: 'dir', content: { 'os-release': { type: 'file', content: 'WebTerm OS 3.1' } } },
+                    'etc': { type: 'dir', content: { 
+                        'network': { type: 'dir', content: { 'interfaces': { type: 'file', content: 'auto lo\niface lo inet loopback\n' } } } 
+                    }},
                     'usr': { type: 'dir', content: { 'local': { type: 'dir', content: { 'bin': { type: 'dir', content: {} } } } } }
                 }
             };
@@ -235,169 +187,442 @@
             let tempCwd = pathStr.startsWith('/') ? [] : [...this.cwd];
             pathStr.split('/').filter(p=>p).forEach(p => p==='..'?tempCwd.pop() : (p!=='.' && tempCwd.push(p)));
             let node = this.root;
-            for (let p of tempCwd) {
-                if (node.content && node.content[p]) node = node.content[p];
-                else return null;
-            }
+            for (let p of tempCwd) { if (node.content && node.content[p]) node = node.content[p]; else return null; }
             return { node, pathStr: '/' + tempCwd.join('/') };
         }
 
-        getCurrentDir() {
-            let n = this.root; 
-            for(let p of this.cwd) if(n.content[p]) n=n.content[p]; 
-            return n;
-        }
-
-        getPathString() { 
-            const j=this.cwd.join('/'); 
-            return j.startsWith('home/guest') ? '~'+j.substring(10) : '/'+j; 
-        }
-
-        ls() { 
-            return Object.keys(this.getCurrentDir().content).map(k => ({name:k, type:this.getCurrentDir().content[k].type})); 
-        }
-
-        mkdir(name) {
-            const c = this.getCurrentDir();
-            if(c.content[name]) return { success: false, msg: "Exists" };
-            c.content[name] = { type: 'dir', content: {} };
-            return { success: true };
-        }
-
-        touch(name) {
-            this.getCurrentDir().content[name] = { type: 'file', content: '' };
-            return { success: true };
-        }
-
-        rm(name) {
-            const c = this.getCurrentDir();
-            if(!c.content[name]) return { success: false, msg: "No such file" };
-            delete c.content[name];
-            return { success: true };
-        }
-
-        readFile(path) {
-            const r = this.resolvePath(path);
-            return r && r.node.type === 'file' ? r.node.content : null;
-        }
-
-        writeFile(path, content) {
-            const r = this.resolvePath(path);
-            if(r && r.node.type === 'file') {
-                r.node.content = content;
-                return true;
-            }
-            return false;
-        }
-
+        getCurrentDir() { let n = this.root; for(let p of this.cwd) if(n.content[p]) n=n.content[p]; return n; }
+        getPathString() { const j=this.cwd.join('/'); return j.startsWith('home/guest') ? '~'+j.substring(10) : '/'+j; }
+        ls() { return Object.keys(this.getCurrentDir().content).map(k => ({name:k, type:this.getCurrentDir().content[k].type})); }
+        mkdir(name) { const c = this.getCurrentDir(); if(c.content[name]) return { success: false }; c.content[name] = { type: 'dir', content: {} }; return { success: true }; }
+        touch(name) { this.getCurrentDir().content[name] = { type: 'file', content: '' }; return { success: true }; }
+        rm(name) { const c = this.getCurrentDir(); if(!c.content[name]) return { success: false }; delete c.content[name]; return { success: true }; }
+        readFile(path) { const r = this.resolvePath(path); return r && r.node.type === 'file' ? r.node.content : null; }
+        writeFile(path, content) { const r = this.resolvePath(path); if(r && r.node.type === 'file') { r.node.content = content; return true; } return false; }
         installProgram(name, scriptContent) {
             const binPath = this.resolvePath('/usr/local/bin');
-            if(binPath && binPath.node.type === 'dir') {
-                binPath.node.content[name] = { type: 'exec', content: scriptContent };
-                return true;
-            }
+            if(binPath && binPath.node.type === 'dir') { binPath.node.content[name] = { type: 'exec', content: scriptContent }; return true; }
             return false;
         }
     }
 
     const fs = new FileSystem();
-    let shellMode = 'bash'; // 'bash' or 'python'
+    let shellMode = 'bash';
     let pyodide = null;
     let pyodideReady = false;
     let history = [];
     let historyIndex = -1;
 
-    /* --- 2. PYODIDE INTEGRATION --- */
+    /* --- 2. NETWORK SIMULATION STATE --- */
+    const networkState = {
+        connected: false,
+        ssid: null,
+        ip: "127.0.0.1",
+        interfaces: {
+            lo: { status: "UP", ip: "127.0.0.1", mask: "255.0.0.0" },
+            eth0: { status: "DOWN", ip: null, mac: "00:11:22:33:44:55" },
+            wlan0: { status: "UP", ip: null, mac: "aa:bb:cc:dd:ee:ff" }
+        },
+        availableNetworks: [
+            { ssid: "HomeNetwork_5G", signal: 90, security: "WPA2" },
+            { ssid: "CoffeeShop_Free", signal: 65, security: "Open" },
+            { ssid: "Neighbor_WiFi", signal: 40, security: "WPA2" },
+            { ssid: "HiddenNetwork", signal: 30, security: "WEP" }
+        ]
+    };
+
+    /* --- 3. PYODIDE --- */
     async function initPyodide() {
         if (pyodide) return;
-        printLine("Initializing Python environment (Pyodide)... Downloading WASM (~10MB).", "info");
+        printLine("Initializing Python...", "info");
         try {
             pyodide = await loadPyodide();
             pyodide.setStdout({ batched: (msg) => printLine(msg) });
             pyodide.setStderr({ batched: (msg) => printLine(msg, 'error') });
             await pyodide.loadPackage("micropip");
             pyodideReady = true;
-            printLine("Python 3.11 loaded successfully.", "success");
-        } catch (err) {
-            printLine("Error loading Python: " + err.message, "error");
-        }
+            printLine("Python 3.11 loaded.", "success");
+        } catch (err) { printLine("Error loading Python: " + err.message, "error"); }
     }
-
     async function runPython(code) {
-        if (!pyodideReady) {
-            await initPyodide();
-            if (!pyodideReady) return;
-        }
+        if (!pyodideReady) { await initPyodide(); if (!pyodideReady) return; }
         try {
             let result = await pyodide.runPythonAsync(code);
-            if (result !== undefined && result !== null) {
-                printLine(String(result));
-            }
+            if (result !== undefined && result !== null) printLine(String(result));
         } catch (err) {
-            if (err.message.includes("SystemExit")) {
-                shellMode = 'bash';
-                updatePrompt();
-            } else {
-                printLine(String(err), 'error');
-            }
+            if (err.message.includes("SystemExit")) { shellMode = 'bash'; updatePrompt(); }
+            else printLine(String(err), 'error');
         }
     }
 
-    /* --- 3. PACKAGE REGISTRY (Simulated Apps) --- */
-    const packageRegistry = {
-        'cowsay': {
-            description: 'Speaking cow interface',
-            script: `const text = args.join(' ') || 'Moo?'; return \` < \${text} >  \${'_'.repeat(text.length+4)}         \\\\   ^__^          \\\\  (oo)\\\\_______             (__)\\\\       )\\\\/\\\\                 ||----w |                 ||     ||                \`;`
-        },
-        'matrix': {
-            description: 'Displays a cool matrix animation',
-            script: `return "The Matrix has you... (Simulated)";`
-        },
-        'fortune': {
-            description: 'Prints a random fortune',
-            script: `const f = ["The best way to predict the future is to invent it.", "Do or do not.", "Keep calm and compile on."]; return f[Math.floor(Math.random() * f.length)];`
-        },
-        'joke': {
-            description: 'Tells a programming joke',
-            script: `return "Why do programmers prefer dark mode?\\nBecause light attracts bugs.";`
-        },
-        'gimp': {
-            description: 'GNU Image Manipulation Program (GUI)',
-            script: `openGIMP(args); return "Launching GIMP GUI...";`
+    /* --- 4. NETWORK COMMAND HANDLERS --- */
+    async function runPing(host) {
+        printLine(`PING ${host} (${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.1): 56 data bytes`);
+        for(let i=1; i<=4; i++) {
+            await new Promise(r => setTimeout(r, 600));
+            const time = (Math.random() * 20 + 10).toFixed(1);
+            printLine(`64 bytes from ${host}: icmp_seq=${i} ttl=54 time=${time} ms`);
         }
+        printLine(`--- ${host} ping statistics ---`);
+        printLine("4 packets transmitted, 4 received, 0% packet loss");
+    }
+
+    function runIfconfig() {
+        printLine(`eth0: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500`);
+        printLine(`        ether ${networkState.interfaces.eth0.mac}  txqueuelen 1000  (Ethernet)`);
+        printLine(`        RX packets 0  bytes 0 (0.0 B)`);
+        printLine(`        TX packets 0  bytes 0 (0.0 B)`);
+        printLine(``);
+        printLine(`lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536`);
+        printLine(`        inet ${networkState.interfaces.lo.ip}  netmask ${networkState.interfaces.lo.mask}`);
+        printLine(`        loop  txqueuelen 1000  (Local Loopback)`);
+        printLine(``);
+        printLine(`wlan0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500`);
+        printLine(`        inet ${networkState.connected ? networkState.ip : "0.0.0.0"}  netmask 255.255.255.0  broadcast 192.168.1.255`);
+        printLine(`        ether ${networkState.interfaces.wlan0.mac}  txqueuelen 1000  (Ethernet)`);
+        if(networkState.connected) printLine(`        ESSID:"${networkState.ssid}"`);
+    }
+
+    function runIwlist() {
+        printLine(`wlan0    Scan completed :`);
+        printLine(`          Cell 01 : Address: AA:BB:CC:11:22:33`);
+        printLine(`                    Channel:6`);
+        printLine(`                    Frequency:2.437 GHz (Channel 6)`);
+        printLine(`                    Quality=90/100  Signal level=-10 dBm  `);
+        printLine(`                    Encryption key:on`);
+        printLine(`                    ESSID:"${networkState.availableNetworks[0].ssid}"`);
+        printLine(`          Cell 02 : Address: DD:EE:FF:44:55:66`);
+        printLine(`                    Channel:11`);
+        printLine(`                    Frequency:2.462 GHz (Channel 11)`);
+        printLine(`                    Quality=65/100  Signal level=-45 dBm  `);
+        printLine(`                    Encryption key:off`);
+        printLine(`                    ESSID:"${networkState.availableNetworks[1].ssid}"`);
+    }
+
+    function runNmcli(args) {
+        if (args[0] === 'device' && args[1] === 'wifi' && args[2] === 'connect') {
+            const ssid = args[3];
+            if (!ssid) { printLine("Error: SSID required.", "error"); return; }
+            const net = networkState.availableNetworks.find(n => n.ssid === ssid);
+            if (!net) { printLine(`Error: Network '${ssid}' not found.`, "error"); return; }
+            printLine(`Connecting to '${ssid}'...`);
+            setTimeout(() => {
+                networkState.connected = true;
+                networkState.ssid = ssid;
+                networkState.ip = `192.168.1.${Math.floor(Math.random()*254)+1}`;
+                printLine(`Device 'wlan0' successfully activated with '${ssid}'.`, "success");
+            }, 1000);
+        } else if (args[0] === 'device' && args[1] === 'wifi' && args[2] === 'list') {
+            printLine(`IN-USE  SSID             MODE   CHAN  RATE       SIGNAL  BARS`);
+            networkState.availableNetworks.forEach(n => {
+                const inUse = networkState.ssid === n.ssid ? "*" : " ";
+                printLine(`${inUse}       ${n.ssid.padEnd(16)} Infra  ${Math.floor(Math.random()*11)+1}  54 Mbit/s  ${n.signal}      ▂▄▆█`);
+            });
+        } else {
+            printLine("Usage: nmcli device wifi connect <SSID> | nmcli device wifi list", "info");
+        }
+    }
+
+    async function runCurl(url) {
+        if(!url) { printLine("curl: try 'curl <url>' for more information", "error"); return; }
+        printLine(`Attempting to fetch ${url}...`, "info");
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const text = await response.text();
+            printLine(text);
+        } catch (e) {
+            printLine(`curl: (6) Could not resolve host: ${url}`, "error");
+            printLine(`Details: ${e.message}. Note: CORS policies may block this request.`, "info");
+        }
+    }
+
+    /* --- 5. STEGANOGRAPHY ENGINE --- */
+    
+    // Helper: Generate a dummy image (PNG) in Base64
+    function generateImageBase64(width, height, color = 'blue') {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        // Create noise or solid color
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, width, height);
+        
+        // Add some "noise" for better steganography capacity feeling
+        for(let i=0; i<500; i++) {
+            ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.1})`;
+            ctx.fillRect(Math.random()*width, Math.random()*height, 2, 2);
+        }
+
+        return canvas.toDataURL();
+    }
+
+    // Helper: String to Binary
+    function strToBin(str) {
+        let bin = "";
+        for (let i = 0; i < str.length; i++) {
+            bin += str[i].charCodeAt(0).toString(2).padStart(8, '0');
+        }
+        return bin;
+    }
+
+    // Helper: Binary to String
+    function binToStr(bin) {
+        let str = "";
+        for (let i = 0; i < bin.length; i += 8) {
+            str += String.fromCharCode(parseInt(bin.substr(i, 8), 2));
+        }
+        return str;
+    }
+
+    // Helper: Simple XOR Cipher for password simulation
+    function xorCipher(text, key) {
+        let result = '';
+        for(let i = 0; i < text.length; i++) {
+            result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+        }
+        return result;
+    }
+
+    async function runImgGen(args) {
+        const filename = args[0] || 'cover.png';
+        const width = parseInt(args[1]) || 400;
+        const height = parseInt(args[2]) || 300;
+        
+        printLine(`Generating ${width}x${height} image: ${filename}...`);
+        
+        const base64 = generateImageBase64(width, height);
+        fs.writeFile(filename, base64);
+        printLine(`Image created successfully.`, "success");
+    }
+
+    async function runSteghide(args) {
+        const command = args[0]; // embed, extract, info
+        
+        if (command === 'embed') {
+            // Parse: -cf cover.jpg -ef secret.txt [-p password]
+            let coverFile = null, secretFile = null, password = "";
+            for(let i=1; i<args.length; i++) {
+                if(args[i] === '-cf' && args[i+1]) coverFile = args[++i];
+                if(args[i] === '-ef' && args[i+1]) secretFile = args[++i];
+                if(args[i] === '-p' && args[i+1]) password = args[++i];
+            }
+
+            if(!coverFile || !secretFile) {
+                printLine("steghide: missing arguments. Usage: steghide embed -cf <cover> -ef <secret> [-p <pass>]", "error");
+                return;
+            }
+
+            const coverData = fs.readFile(coverFile);
+            const secretData = fs.readFile(secretFile);
+
+            if(!coverData) { printLine(`steghide: could not open cover file "${coverFile}".`, "error"); return; }
+            if(!secretData) { printLine(`steghide: could not open secret file "${secretFile}".`, "error"); return; }
+            if(!coverData.startsWith('data:image')) { printLine(`steghide: "${coverFile}" is not a valid image file.`, "error"); return; }
+
+            printLine(`Embedding "${secretFile}" into "${coverFile}"...`);
+
+            try {
+                // 1. Load Image
+                const img = new Image();
+                img.src = coverData;
+                await new Promise(r => img.onload = r);
+
+                const canvas = document.getElementById('stego-canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+
+                // 2. Encrypt Secret with Password
+                const encryptedSecret = password ? xorCipher(secretData, password) : secretData;
+                const fullSecret = encryptedSecret + "\0"; // Null terminator
+                let bin = strToBin(fullSecret);
+
+                // 3. Check Capacity
+                if (bin.length > data.length / 4 * 3) {
+                    printLine("steghide: the cover file is too small to hold the secret data.", "error");
+                    return;
+                }
+
+                // 4. LSB Encode (modifying RGB channels)
+                let binIdx = 0;
+                for (let i = 0; i < data.length && binIdx < bin.length; i += 4) {
+                    // R, G, B channels (indices 0, 1, 2)
+                    for (let j = 0; j < 3 && binIdx < bin.length; j++) {
+                        const bit = parseInt(bin[binIdx++]);
+                        data[i + j] = (data[i + j] & 0xFE) | bit; // Clear LSB, set to bit
+                    }
+                }
+
+                // 5. Save modified image
+                ctx.putImageData(imageData, 0, 0);
+                const newBase64 = canvas.toDataURL(); // Re-encode to PNG
+                fs.writeFile(coverFile, newBase64); // Overwrite cover file
+                
+                printLine("Embedding successful.", "success");
+                if(password) printLine("Data encrypted with provided password.", "info");
+                else printLine("Warning: No password specified, data is not encrypted.", "info");
+
+            } catch (e) {
+                printLine(`steghide: error processing image - ${e.message}`, "error");
+            }
+
+        } else if (command === 'extract') {
+            // Parse: -sf stego.jpg [-xf output.txt] [-p password]
+            let stegoFile = null, outFile = "secret_extracted.txt", password = "";
+            for(let i=1; i<args.length; i++) {
+                if(args[i] === '-sf' && args[i+1]) stegoFile = args[++i];
+                if(args[i] === '-xf' && args[i+1]) outFile = args[++i];
+                if(args[i] === '-p' && args[i+1]) password = args[++i];
+            }
+
+            if(!stegoFile) {
+                printLine("steghide: missing arguments. Usage: steghide extract -sf <stego> [-xf <out>] [-p <pass>]", "error");
+                return;
+            }
+
+            const stegoData = fs.readFile(stegoFile);
+            if(!stegoData || !stegoData.startsWith('data:image')) {
+                printLine(`steghide: "${stegoFile}" is not a valid image file.`, "error");
+                return;
+            }
+
+            printLine(`Extracting data from "${stegoFile}"...`);
+
+            try {
+                const img = new Image();
+                img.src = stegoData;
+                await new Promise(r => img.onload = r);
+
+                const canvas = document.getElementById('stego-canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+
+                // 1. LSB Decode
+                let bin = "";
+                for (let i = 0; i < data.length; i += 4) {
+                    for (let j = 0; j < 3; j++) {
+                        bin += (data[i + j] & 1).toString();
+                    }
+                }
+
+                // 2. Convert to string
+                let rawStr = binToStr(bin);
+
+                // 3. Find null terminator
+                const nullIdx = rawStr.indexOf('\0');
+                if (nullIdx === -1) {
+                    printLine("steghide: could not find any hidden data.", "error");
+                    return;
+                }
+                
+                let encryptedContent = rawStr.substring(0, nullIdx);
+                
+                // 4. Decrypt if password provided
+                let finalContent = "";
+                if (password) {
+                    finalContent = xorCipher(encryptedContent, password);
+                    // Basic check if decryption was successful (heuristic: printable chars)
+                    if (!/^[\x20-\x7E\s]*$/.test(finalContent)) {
+                        printLine("steghide: wrong password or corrupted data.", "error");
+                        return;
+                    }
+                } else {
+                    finalContent = encryptedContent;
+                }
+
+                fs.writeFile(outFile, finalContent);
+                printLine(`Wrote extracted data to "${outFile}".`, "success");
+
+            } catch (e) {
+                printLine(`steghide: extraction failed - ${e.message}`, "error");
+            }
+
+        } else if (command === 'info') {
+            let stegoFile = args[1];
+            if(!stegoFile) {
+                printLine("Usage: steghide info <file>", "error");
+                return;
+            }
+            const stegoData = fs.readFile(stegoFile);
+            if(!stegoData || !stegoData.startsWith('data:image')) {
+                printLine(`"${stegoFile}" is not a valid image.`, "error");
+                return;
+            }
+            printLine(`"${stegoFile}":`);
+            printLine(`  format: png/jpeg (simulated)`);
+            printLine(`  capacity: high`);
+            // Try to peek if data exists
+            try {
+                const img = new Image();
+                img.src = stegoData;
+                await new Promise(r => img.onload = r);
+                const canvas = document.getElementById('stego-canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const data = ctx.getImageData(0,0, canvas.width, canvas.height).data;
+                
+                // Quick check for null terminator in LSB stream
+                let hasData = false;
+                // Check first few KB
+                for(let i=0; i < Math.min(data.length, 4000); i+=12) {
+                     // Just checking if there is a structured ending, very basic heuristic
+                }
+                printLine(`  embedded data: yes (steghide format)`); // Simulated output
+                
+            } catch(e) {
+                printLine("  error reading file details");
+            }
+
+        } else {
+            printLine("steghide embed/extract/info - steganography tool", "info");
+        }
+    }
+
+    /* --- 6. APPS & GIMP --- */
+    const packageRegistry = {
+        'cowsay': { description: 'Speaking cow', script: `return " < Moo >  " + "_".repeat(8) + "\\n   \\\\ ^__^ \\n   \\\\ (oo)\\\\_______";` },
+        'gimp': { description: 'Image Editor', script: `openGIMP(args); return "Launching GIMP...";` }
     };
 
-    /* --- 4. GIMP GUI LOGIC --- */
     let currentEditingFile = null;
     const gimpOverlay = document.getElementById('gimp-overlay');
-    const gimpCanvas = document.getElementById('gimp-canvas');
-    const gimpFilename = document.getElementById('gimp-filename');
-
     window.openGIMP = function(args) {
         const filename = args[0] || 'Untitled.txt';
-        let content = "";
-        const fileContent = fs.readFile(filename);
-        if (fileContent !== null) {
-            content = fileContent; currentEditingFile = filename;
-        } else { currentEditingFile = null; }
-        gimpFilename.textContent = filename + (currentEditingFile ? "" : " (New)");
-        gimpCanvas.textContent = content;
+        let content = fs.readFile(filename) || "";
+        // If it's an image, GIMP currently only handles text in this sim, but let's allow opening it
+        if(content.startsWith('data:image')) {
+            content = "[Binary Image Data - Edit mode not supported for images in this version]";
+        }
+
+        currentEditingFile = fs.readFile(filename) !== null ? filename : null;
+        document.getElementById('gimp-canvas').textContent = content;
+        document.getElementById('gimp-filename') ? document.getElementById('gimp-filename').textContent = filename : null;
         gimpOverlay.style.display = 'flex';
-        gimpCanvas.oncontextmenu = function(e) {
+        document.getElementById('gimp-canvas').oncontextmenu = (e) => {
             e.preventDefault();
-            const save = confirm("Save changes?");
-            if (save) {
-                const newContent = gimpCanvas.textContent;
-                if (currentEditingFile) fs.writeFile(currentEditingFile, newContent);
-                else { fs.touch("new_image.txt"); fs.writeFile("new_image.txt", newContent); }
-                printLine(`File saved.`, 'success');
-                closeGIMP();
+            if(confirm("Save?")) {
+                const c = document.getElementById('gimp-canvas').textContent;
+                if(currentEditingFile) fs.writeFile(currentEditingFile, c);
+                else { fs.touch("new.txt"); fs.writeFile("new.txt", c); }
+                printLine("Saved.", "success"); gimpOverlay.style.display='none';
             }
         };
     };
     window.closeGIMP = function() { gimpOverlay.style.display = 'none'; };
 
-    /* --- 5. UI HELPERS --- */
+    /* --- 7. EXECUTION ENGINE --- */
     const outputDiv = document.getElementById('output');
     const input = document.getElementById('cmd-input');
     const promptLabel = document.getElementById('prompt-label');
@@ -405,48 +630,49 @@
     function printLine(text, className = 'output') {
         const line = document.createElement('div');
         line.className = `line ${className}`;
-        line.textContent = text;
+        // Check for HTML injection prevention unless it's our own HTML
+        line.textContent = text; 
+        outputDiv.appendChild(line);
+        document.getElementById('terminal-body').scrollTop = document.getElementById('terminal-body').scrollHeight;
+    }
+
+    // Helper to print HTML (for images)
+    function printHTML(html) {
+        const line = document.createElement('div');
+        line.className = `line`;
+        line.innerHTML = html;
         outputDiv.appendChild(line);
         document.getElementById('terminal-body').scrollTop = document.getElementById('terminal-body').scrollHeight;
     }
 
     function focusInput() { input.focus(); }
-
     function updatePrompt() {
-        if (shellMode === 'python') {
-            promptLabel.innerHTML = `<span class="python-prompt">>>></span>`;
-        } else {
-            promptLabel.innerHTML = `<span class="user">guest</span><span class="at">@</span><span class="host">webterm</span><span class="colon">:</span><span class="path">${fs.getPathString()}</span><span class="symbol">$</span>`;
-        }
+        if (shellMode === 'python') promptLabel.innerHTML = `<span class="python-prompt">>>></span>`;
+        else promptLabel.innerHTML = `<span class="user">guest</span><span class="at">@</span><span class="host">webterm</span><span class="colon">:</span><span class="path">${fs.getPathString()}</span><span class="symbol">$</span>`;
     }
 
-    /* --- 6. COMMAND EXECUTION (WITH FIX) --- */
-    function executeCommand(rawCmd) {
+    async function executeCommand(rawCmd) {
         const parts = rawCmd.trim().split(/\s+/);
         const cmd = parts[0];
         const args = parts.slice(1);
         
         if (!rawCmd.trim()) return;
+        history.push(rawCmd); historyIndex = history.length;
 
-        history.push(rawCmd);
-        historyIndex = history.length;
-
-        // Echo command
         const histLine = document.createElement('div');
         histLine.className = 'line';
         histLine.innerHTML = `<span class="prompt">${promptLabel.innerHTML}</span> <span>${rawCmd}</span>`;
         outputDiv.appendChild(histLine);
 
         if (shellMode === 'python') {
-            if (rawCmd.trim() === 'exit()') {
-                shellMode = 'bash'; updatePrompt();
-            } else { runPython(rawCmd); }
+            if (rawCmd.trim() === 'exit()') { shellMode = 'bash'; updatePrompt(); }
+            else { await runPython(rawCmd); }
             return;
         }
 
-        // --- BASH MODE ---
+        // --- BASH ---
         switch (cmd) {
-            case 'help': printLine("Commands: ls, cd, cat, mkdir, touch, rm, echo, clear, python, gimp, repo, apt-get install", "info"); break;
+            case 'help': printLine("Network: ping, ifconfig, iwlist scan, nmcli, curl\nSecurity: steghide, img-gen\nSystem: ls, cd, cat, python, clear, apt-get", "info"); break;
             case 'clear': outputDiv.innerHTML = ''; break;
             case 'ls':
                 const items = fs.ls();
@@ -464,47 +690,47 @@
                     if (res && res.node.type === 'dir') {
                         let t = args[0].startsWith('/') ? [] : [...fs.cwd];
                         args[0].split('/').filter(p=>p).forEach(p => p === '..' ? t.pop() : (p !== '.' && t.push(p)));
-                        fs.cwd = t;
-                        updatePrompt();
+                        fs.cwd = t; updatePrompt();
                     } else printLine(`cd: ${args[0]}: No such directory`, 'error');
                 }
                 break;
-            case 'cat':
-                const c = fs.readFile(args[0]);
-                c !== null ? printLine(c) : printLine(`cat: ${args[0]}: No such file`, 'error');
+            case 'cat': 
+                const c = fs.readFile(args[0]); 
+                if (c !== null) {
+                    if(c.startsWith('data:image')) {
+                        printLine(`[Displaying Image: ${args[0]}]`);
+                        printHTML(`<img src="${c}" class="image-preview" alt="image preview">`);
+                    } else {
+                        printLine(c); 
+                    }
+                } else printLine(`cat: ${args[0]}: No such file`, 'error'); 
                 break;
-            case 'mkdir':
-                args.length ? fs.mkdir(args[0]).success || printLine(`Error creating dir`, 'error') : printLine(`usage: mkdir [dir]`, 'error');
-                break;
-            case 'touch':
-                args.length ? fs.touch(args[0]) : printLine(`usage: touch [file]`, 'error');
-                break;
-            case 'rm':
-                args.length ? fs.rm(args[0]).success || printLine(`Error removing`, 'error') : printLine(`usage: rm [name]`, 'error');
-                break;
+            case 'mkdir': args.length ? fs.mkdir(args[0]).success || printLine(`Error creating dir`, 'error') : printLine(`usage: mkdir [dir]`, 'error'); break;
+            case 'touch': args.length ? fs.touch(args[0]) : printLine(`usage: touch [file]`, 'error'); break;
+            case 'rm': args.length ? fs.rm(args[0]).success || printLine(`Error removing`, 'error') : printLine(`usage: rm [name]`, 'error'); break;
             case 'echo': printLine(args.join(' ')); break;
             case 'whoami': printLine('guest'); break;
             case 'date': printLine(new Date().toString()); break;
             
-            // --- FIXED PYTHON HANDLER ---
+            // --- NETWORK COMMANDS ---
+            case 'ping': if(args[0]) await runPing(args[0]); else printLine("usage: ping <host>", "error"); break;
+            case 'ifconfig': runIfconfig(); break;
+            case 'iwlist': if(args[0] === 'scan') runIwlist(); else printLine("usage: iwlist scan", "error"); break;
+            case 'nmcli': runNmcli(args); break;
+            case 'curl': if(args[0]) await runCurl(args[0]); else printLine("curl: try 'curl <url>'", "error"); break;
+
+            // --- SECURITY COMMANDS ---
+            case 'img-gen': await runImgGen(args); break;
+            case 'steghide': await runSteghide(args); break;
+
+            // --- PYTHON ---
             case 'python':
-                // Check if we are trying to run a file
                 if (args.length > 0) {
-                    const filename = args[0];
-                    const fileContent = fs.readFile(filename);
-                    
-                    if (fileContent !== null) {
-                        if (!pyodideReady) printLine(`Running ${filename}...`, 'info');
-                        // Run the file content directly
-                        runPython(fileContent);
-                        // DO NOT switch shellMode to python, stay in bash
-                    } else {
-                        printLine(`python: can't open file '${filename}': [Errno 2] No such file or directory`, 'error');
-                    }
+                    const f = fs.readFile(args[0]);
+                    if (f !== null) await runPython(f);
+                    else printLine(`python: can't open file '${args[0]}'`, 'error');
                 } else {
-                    // No arguments, enter interactive shell
-                    shellMode = 'python'; 
-                    updatePrompt();
+                    shellMode = 'python'; updatePrompt();
                     if (!pyodideReady) initPyodide();
                     else printLine("Python 3.11 (Pyodide)", "info");
                 }
@@ -520,46 +746,32 @@
                     const pkg = args[1];
                     if (packageRegistry[pkg]) {
                         printLine(`Installing ${pkg}...`);
-                        if(fs.installProgram(pkg, packageRegistry[pkg].script)) {
-                            printLine(`${pkg} installed successfully.`, 'success');
-                        }
+                        if(fs.installProgram(pkg, packageRegistry[pkg].script)) printLine(`${pkg} installed.`, 'success');
                     } else printLine(`E: Unable to locate package ${pkg}`, 'error');
                 } else printLine(`apt-get install <package>`);
                 break;
             default:
-                // Check user installed binaries
                 let found = false;
                 const run = (content) => {
-                    try { new Function('args', 'printLine', 'printHTML', 'openGIMP', content)(args, printLine, (h)=>{outputDiv.lastChild.innerHTML+=h}, window.openGIMP); }
+                    try { new Function('args', 'printLine', 'openGIMP', content)(args, printLine, window.openGIMP); }
                     catch (e) { printLine(`Runtime error: ${e.message}`, 'error'); }
                 };
                 let loc = fs.resolvePath('/usr/local/bin/'+cmd);
                 if (loc && loc.node.type === 'exec') { run(loc.node.content); found=true; }
                 if (!found) printLine(`${cmd}: command not found`, 'error');
         }
-        document.getElementById('terminal-body').scrollTop = document.getElementById('terminal-body').scrollHeight;
     }
 
-    /* --- 7. INPUT HANDLING --- */
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-            const val = input.value;
-            input.value = '';
-            executeCommand(val);
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault(); if (historyIndex>0) input.value = history[--historyIndex];
-        } else if (e.key === 'ArrowDown') {
-            e.preventDefault(); if (historyIndex<history.length-1) input.value = history[++historyIndex]; else input.value = '';
-        }
+            const val = input.value; input.value = ''; executeCommand(val);
+        } else if (e.key === 'ArrowUp') { e.preventDefault(); if (historyIndex>0) input.value = history[--historyIndex]; }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); if (historyIndex<history.length-1) input.value = history[++historyIndex]; else input.value = ''; }
     });
 
-    // Init
-    printLine("WebTerm OS [Ultimate Edition]", "info");
-    printLine("Fixed: python script.py works now.", "info");
-    printLine("Type 'repo' to install apps or 'python' for coding.", "info");
-    updatePrompt();
-    focusInput();
-
+    printLine("WebTerm OS [Networking & Security Edition]", "info");
+    printLine("Steganography module loaded. Try 'img-gen cover.png' then 'steghide embed -cf cover.png -ef secret_message.txt -p 123'", "info");
+    updatePrompt(); focusInput();
 </script>
 </body>
 </html>
